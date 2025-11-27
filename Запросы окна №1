@@ -1,0 +1,41 @@
+-- UPDATE LOCK окно №1
+BEGIN;
+SELECT balance FROM bank_accounts WHERE id = 1;  -- 15000
+-- Выппоняется транзакция №2
+
+-- UPDATE 1 транзакции
+UPDATE bank_accounts SET balance = 10000 WHERE id = 1; -- в приложении вычли 5000
+-- COMMIT транзакции №1
+COMMIT;
+
+
+
+
+-- Non-repeatable Read окно №1
+BEGIN;
+SELECT sum(balance) FROM bank_accounts; -- 92000
+-- Выпполняется тразакнция №2
+
+-- COMMIT 1 транзакции
+SELECT sum(balance) FROM bank_accounts;   -- уже 83800!
+COMMIT;
+
+
+-- Phantom Read окно №1
+BEGIN;
+SELECT count(*) FROM bank_accounts WHERE balance < 16000; -- результат : 2
+-- Выпполняется тразакнция №2
+
+-- COMMIT 1 транзакции
+SELECT count(*) FROM bank_accounts WHERE balance < 16000;  -- уже 3!
+COMMIT;
+
+
+-- Anomaly / Write Skew окно №1
+BEGIN;
+SELECT id, full_name, status FROM doctors WHERE status = true;
+-- Транзакция №2 выполняется
+
+-- COMMIT транзакции №1
+UPDATE doctors SET status = false WHERE id = 1;
+COMMIT;   -- ← Иванов тоже ушёл
