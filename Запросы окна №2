@@ -1,0 +1,26 @@
+-- UPDATE LOCK окно №2
+BEGIN;
+SELECT balance FROM bank_accounts WHERE id = 1;  -- тоже 15000
+UPDATE bank_accounts SET balance = 80000 WHERE id = 1; -- в приложении вычли 7000
+COMMIT; -- balance = 8000
+
+
+
+-- Non-repeatable Read окно №2
+BEGIN;
+UPDATE bank_accounts SET balance = 1000 WHERE id = 4;  -- был 9200, стал 1000
+COMMIT;
+
+
+
+-- Phantom Read окно №2
+BEGIN;
+INSERT INTO bank_accounts (holder, balance) VALUES ('Бедняков А.А.', 3500.00);
+COMMIT;
+
+
+-- Anomaly / Write Skew окно №2
+BEGIN;
+SELECT id, full_name, status FROM doctors WHERE status = true;
+UPDATE doctors SET status = false WHERE id = 2;
+COMMIT;   -- ← Петрова ушла
