@@ -1,0 +1,51 @@
+-- 1. Таблица для конфликтов (Lost Update, Non-repeatable Read, Phantom Read)
+-- Банковские счета
+CREATE TABLE bank_accounts (
+    id         serial PRIMARY KEY,
+    holder     text NOT NULL,
+    balance    numeric(8,2) NOT NULL CHECK (balance >= 0)
+);
+
+-- Начальные данные для банковских счетов
+INSERT INTO bank_accounts (holder, balance) VALUES
+('Иванов И.И.',       15000.00),
+('Петров П.П.',       23000.00),
+('Сидорова А.В.',     18700.00),
+('Козлов В.С.',       9200.00),
+('Морозова Е.Н.',     31100.00);
+
+-- Для подготовки к UPDATE LOCK
+SELECT * from bank_accounts ORDER BY(id) ASC
+UPDATE bank_accounts SET balance = 15000 WHERE id = 1;
+
+-- Для подготовки  Non-repeatable Read
+SELECT sum(balance) FROM bank_accounts;
+UPDATE bank_accounts SET balance = 9200 WHERE id = 4;
+
+
+-- Для подготовки Phantom Read
+SELECT * from bank_accounts ORDER BY(id) ASC;
+SELECT count(*) FROM bank_accounts WHERE balance < 16000;
+DELETE FROM bank_accounts WHERE holder = 'Бедняков А.А.';
+
+
+
+-- 2. Таблица для конфликтов (Anomaly / Write Skew)
+-- Доктора
+CREATE TABLE doctors (
+    id         serial PRIMARY KEY,
+    full_name  text NOT NULL,
+    status    boolean NOT NULL
+);
+
+-- Начальные данные. 2 активных врача
+INSERT INTO doctors (full_name, status) VALUES
+('Иванов Сергей Александрович',      true),
+('Петрова Анна Викторовна',          true),
+('Сидоров Дмитрий Николаевич',       false),
+('Козлова Ольга Михайловна',         false);
+
+-- Для подотовки Serialization Anomaly / Write Skew
+SELECT * FROM doctors
+SELECT id, full_name, status FROM doctors WHERE status = true;
+UPDATE doctors SET status = true WHERE id = 1 or id = 2;
