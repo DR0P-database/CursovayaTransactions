@@ -1,0 +1,21 @@
+-- 1. Функция для чтения счёта (автоматически сохраняет xmin!)
+CREATE OR REPLACE FUNCTION get_account(p_id int)
+RETURNS TABLE(id int, holder text, balance numeric(12,2))
+LANGUAGE plpgsql SECURITY DEFINER
+AS $$
+BEGIN
+    -- Автоматически сохраняем текущий xmin строки в сессионную переменную
+    PERFORM set_config('myapp.xmin_' || p_id, a.xmin::text, true)
+    FROM bank_account a
+    WHERE a.id = p_id;
+
+    -- Возвращаем данные клиенту
+    RETURN QUERY
+    SELECT a.id, a.holder, a.balance
+    FROM bank_account a
+    WHERE a.id = p_id;
+END;
+$$;
+
+-- Даём права (выполни один раз от суперпользователя или владельца)
+GRANT EXECUTE ON FUNCTION get_account(int) TO public;   -- или твоя роль
