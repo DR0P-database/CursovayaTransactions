@@ -6,8 +6,8 @@ CREATE TABLE conflict_log (
     operation     text NOT NULL,              -- INSERT / UPDATE / DELETE
     table_name    text NOT NULL,              -- bank_account / doctors
     conflict_type text NOT NULL DEFAULT 'SUCCESS',  -- SUCCESS / LOST_UPDATE / WRITE_SKEW и т.д.
-    old_balance   numeric(12,2),              -- NULL при INSERT
-    new_balance   numeric(12,2),              -- NULL при DELETE
+    old_balance   numeric(8,2),              -- NULL при INSERT
+    new_balance   numeric(8,2),              -- NULL при DELETE
     old_on_duty   boolean,                    -- NULL для bank_account
     new_on_duty   boolean,                    -- NULL для bank_account
     message       text                        -- кастомное сообщение
