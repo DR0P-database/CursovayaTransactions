@@ -1,26 +1,21 @@
 -- UPDATE LOCK окно №1
 BEGIN;
-SELECT balance FROM bank_accounts WHERE id = 1;  -- 15000
--- Выппоняется транзакция №2
-
--- UPDATE 1 транзакции
-UPDATE bank_accounts SET balance = 10000 WHERE id = 1; -- в приложении вычли 5000
--- COMMIT транзакции №1
-COMMIT;
-
--- ПОКА ЧТО НЕРАБОЧИЙ ЗАПРОС
-BEGIN;
 -- Читаем счёт — автоматически сохраняется xmin!
 SELECT * FROM get_account(1);
--- → balance = 15000, и уже сохранено: myapp.xmin_1 = 750123
--- Считаем новое значение
--- new_balance = 15000 - 5000 = 10000
--- Обычный UPDATE (можно жёсткий!)
-UPDATE bank_account SET balance = 10000 WHERE id = 1;
+
+--выполенение транзакции №2
+
+--Птаемся обновить
+UPDATE bank_accounts SET balance = 30000 WHERE id = 1;
 -- → если строка не изменилась → проходит
--- → если изменилась → триггер ловит, пишет в conflict_log и кидает ошибку
+-- → если изменилась → триггер ловит, пишет в conflict_log и не обновляет данные
 COMMIT;
 
+-- UPDATE LOCK окно №2
+BEGIN;
+SELECT * FROM get_account(1);
+UPDATE bank_accounts SET balance = 2000 WHERE id = 1;
+COMMIT;
 
 
 -- Non-repeatable Read окно №1
