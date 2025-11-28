@@ -1,21 +1,40 @@
 -- 1. Функция для чтения счёта (автоматически сохраняет xmin!)
 CREATE OR REPLACE FUNCTION get_account(p_id int)
-RETURNS TABLE(id int, holder text, balance numeric(12,2))
-LANGUAGE plpgsql SECURITY DEFINER
+RETURNS TABLE(id int, holder text, balance numeric(8,2))
+LANGUAGE plpgsql
 AS $$
 BEGIN
-    -- Автоматически сохраняем текущий xmin строки в сессионную переменную
-    PERFORM set_config('myapp.xmin_' || p_id, a.xmin::text, true)
-    FROM bank_account a
-    WHERE a.id = p_id;
-
-    -- Возвращаем данные клиенту
     RETURN QUERY
     SELECT a.id, a.holder, a.balance
-    FROM bank_account a
+    FROM bank_accounts a
     WHERE a.id = p_id;
+
+    -- Эта строка выполнится ТОЛЬКО если предыдущий запрос нашёл хотя бы одну строку
+    IF FOUND THEN
+        PERFORM set_config('myapp.xmin_' || p_id, a.xmin::text, true)
+        FROM bank_accounts a
+        WHERE a.id = p_id;
+    END IF;
 END;
 $$;
 
--- Даём права (выполни один раз от суперпользователя или владельца)
-GRANT EXECUTE ON FUNCTION get_account(int) TO public;   -- или твоя роль
+
+-- 2. Триггерная функция для предотвращения Update Lost
+CREATE OR REPLACE FUNCTION prevent_lost_update()
+RETURNS trigger AS $$
+DECLARE
+    saved_xmin xid := current_setting('myapp.xmin_' || NEW.id, true)::xid;
+	current_xmin xid;
+BEGIN
+	SELECT xmin INTO current_xmin
+    FROM bank_accounts
+    WHERE id = NEW.id;
+    -- Ключевое сравнение: версия при чтении ≠ текущая версия строки
+    IF saved_xmin IS NOT NULL AND saved_xmin <> current_xmin THEN
+        -- Логируем конфликт
+        RAISE EXCEPTION 'LOST_UPDATE_DETECTED: ожидаемый xmin = %, текущий = %', 
+                        saved_xmin, current_xmin;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
