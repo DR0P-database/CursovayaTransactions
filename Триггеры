@@ -13,43 +13,8 @@ CREATE TABLE conflict_log (
     message       text                        -- кастомное сообщение
 );
 
--- Разрешаем всем писать в лог
-GRANT INSERT ON conflict_log TO public;
-
-
-CREATE OR REPLACE FUNCTION prevent_lost_update()
-RETURNS trigger AS $$
-DECLARE
-    saved_xmin text;
-BEGIN
-    -- Берём сохранённый при чтении xmin
-    saved_xmin := current_setting('myapp.xmin_' || NEW.id, true);
-
-    -- Ключевое сравнение: версия при чтении ≠ текущая версия строки
-    IF saved_xmin::bigint != OLD.xmin THEN
-        -- Логируем конфликт
-        INSERT INTO conflict_log(
-            operation, table_name, conflict_type,
-            old_balance, new_balance, message
-        ) VALUES (
-            TG_OP,
-            TG_TABLE_NAME,
-            'LOST_UPDATE',
-            OLD.balance,
-            NEW.balance,
-            'Потерянное обновление: строка изменена другой транзакцией'
-        );
-
-        RAISE EXCEPTION 'LOST_UPDATE_DETECTED: ожидаемый xmin = %, текущий = %', 
-                        saved_xmin, OLD.xmin;
-    END IF;
-
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Вешаем триггер
+-- Триггер для updtate lost
 CREATE TRIGGER trg_prevent_lost_update
-    BEFORE UPDATE ON bank_account
-    FOR EACH ROW
-    EXECUTE FUNCTION prevent_lost_update();
+	BEFORE UPDATE ON bank_accounts
+	FOR EACH ROW
+	EXECUTE FUNCTION prevent_lost_update();
