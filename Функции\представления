@@ -51,3 +51,35 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+--================ Функция для любых SELECT  с блокировкой доступа к CUD ================--
+CREATE OR REPLACE FUNCTION guarded_query(q text)
+RETURNS SETOF jsonb AS $$
+BEGIN
+    -- Блокируем только нужные таблицы по целому слову
+    IF q ~ '\ybank_accounts\y' THEN
+        PERFORM pg_advisory_xact_lock_shared(hashtext('bank_accounts'));
+    END IF;
+	-- Возвращаем запрос с блокировкой
+    RETURN QUERY EXECUTE
+        format('SELECT to_jsonb(t) FROM (%s) AS t', q);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Триггер функция для предотвращения Non-repeatable Read и Phantom Read
+CREATE OR REPLACE FUNCTION guarded_write()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NOT pg_try_advisory_xact_lock(hashtext(TG_TABLE_NAME)) THEN
+	INSERT INTO conflict_log (operation, table_name, conflict_type, message)
+        VALUES (
+            TG_OP,
+            TG_TABLE_NAME,
+            'Read-Write-Read',
+            format('Заблокирована операция %s над таблицей %s из-за временного отсутствия доступа', TG_OP, TG_TABLE_NAME)
+        );
+		RETURN NULL;
+    END IF;
+	RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
