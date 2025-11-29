@@ -20,21 +20,21 @@ COMMIT;
 
 -- Non-repeatable Read окно №1
 BEGIN;
-SELECT sum(balance) FROM bank_accounts; -- 92000
+SELECT * FROM guarded_query('SELECT sum(balance) FROM bank_accounts')
 -- Выпполняется тразакнция №2
 
 -- COMMIT 1 транзакции
-SELECT sum(balance) FROM bank_accounts;   -- уже 83800!
+SELECT * FROM guarded_query('SELECT sum(balance) FROM bank_accounts')  -- уже 83800!
 COMMIT;
 
 
 -- Phantom Read окно №1
 BEGIN;
-SELECT count(*) FROM bank_accounts WHERE balance < 16000; -- результат : 2
+SELECT * FROM guarded_query ('SELECT count(*) FROM bank_accounts WHERE balance < 16000') -- результат : 2
 -- Выпполняется тразакнция №2
 
 -- COMMIT 1 транзакции
-SELECT count(*) FROM bank_accounts WHERE balance < 16000;  -- уже 3!
+SELECT * FROM guarded_query ('SELECT count(*) FROM bank_accounts WHERE balance < 16000')  -- уже 3!
 COMMIT;
 
 
