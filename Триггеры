@@ -18,3 +18,10 @@ CREATE TRIGGER trg_prevent_lost_update
 	BEFORE UPDATE ON bank_accounts
 	FOR EACH ROW
 	EXECUTE FUNCTION prevent_lost_update();
+
+-- Триггер для Non-repeatable Read и Phantom Read
+CREATE OR REPLACE TRIGGER guarded_write_trigger
+    BEFORE INSERT OR UPDATE OR DELETE
+    ON bank_accounts
+    FOR EACH ROW
+    EXECUTE FUNCTION guarded_write();
