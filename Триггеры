@@ -25,3 +25,11 @@ CREATE OR REPLACE TRIGGER guarded_write_trigger
     ON bank_accounts
     FOR EACH ROW
     EXECUTE FUNCTION guarded_write();
+
+
+-- Тригер для предотвращения Anomaly / Write Skew
+CREATE OR REPLACE TRIGGER trg_lock_doctors_active_status
+    BEFORE UPDATE OF status ON doctors
+    FOR EACH ROW
+    WHEN (OLD.status = true AND NEW.status = false)
+    EXECUTE FUNCTION trg_lock_doctors_active_status();
