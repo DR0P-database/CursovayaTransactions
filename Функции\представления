@@ -83,3 +83,30 @@ BEGIN
 	RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Триггер функция для предотвращения Anomaly / Write Skew 
+CREATE OR REPLACE FUNCTION trg_lock_doctors_active_status()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF OLD.status = true AND NEW.status = false THEN
+
+        -- 1. Пытаемся захватить эксклюзивный lock на инвариант
+        IF NOT pg_try_advisory_xact_lock(hashtext('doctors:status:active')) THEN
+            INSERT INTO conflict_log (operation, table_name, conflict_type, message)
+            VALUES (
+                TG_OP,
+                TG_TABLE_NAME,
+                'Write Skew',
+                'Попытка одновременно деактивировать последнего активного врача — отклонено'
+            );
+            RETURN NULL;  -- строка не обновляется
+        END IF;
+
+        -- 2. Теперь под защитой проверяем актуальное количество
+        IF (SELECT COUNT(*) FROM doctors WHERE status = true) <= 1 THEN
+            RAISE EXCEPTION 'Нельзя деактивировать последнего активного врача';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
