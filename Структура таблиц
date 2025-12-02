@@ -1,10 +1,12 @@
--- 1. Таблица для конфликтов (Lost Update, Non-repeatable Read, Phantom Read)
+-- 1. Таблица для всех конфликтов
 -- Банковские счета
 CREATE TABLE bank_accounts (
-    id         serial PRIMARY KEY,
-    holder     text NOT NULL,
-    balance    numeric(8,2) NOT NULL CHECK (balance >= 0)
+    id SERIAL PRIMARY KEY,
+    holder TEXT NOT NULL,
+    balance NUMERIC(8,2) NOT NULL CHECK (balance >= 0),
+    is_active BOOLEAN NOT NULL DEFAULT TRUE
 );
+
 
 -- Начальные данные для банковских счетов
 INSERT INTO bank_accounts (holder, balance) VALUES

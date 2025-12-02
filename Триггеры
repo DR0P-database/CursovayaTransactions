@@ -19,17 +19,25 @@ CREATE TRIGGER trg_prevent_lost_update
 	FOR EACH ROW
 	EXECUTE FUNCTION prevent_lost_update();
 
--- Триггер для Non-repeatable Read и Phantom Read
-CREATE OR REPLACE TRIGGER guarded_write_trigger
-    BEFORE INSERT OR UPDATE OR DELETE
+-- Триггер для Non-repeatable Read и Phantom Read и Anomaly / Write Skew
+CREATE or REPLACE TRIGGER trg_accounts_write_lock
+    BEFORE INSERT OR UPDATE OR DELETE ON bank_accounts
+    FOR EACH ROW
+    EXECUTE FUNCTION accounts_guarded_write();
+
+-- Бизнес правило для Anomaly / Write Skew 
+-- Триггер: нельзя деактивировать последний активный счёт
+CREATE OR REPLACE TRIGGER trg_bank_accounts_at_least_one_active
+    BEFORE UPDATE OF is_active      -- срабатывает только при изменении is_active
     ON bank_accounts
     FOR EACH ROW
-    EXECUTE FUNCTION guarded_write();
+    WHEN (OLD.is_active = TRUE AND NEW.is_active = FALSE)  -- только при снятии с активности
+    EXECUTE FUNCTION accounts_business_rule_check();
 
-
--- Тригер для предотвращения Anomaly / Write Skew
-CREATE OR REPLACE TRIGGER trg_lock_doctors_active_status
-    BEFORE UPDATE OF status ON doctors
+-- Дополнительно: нельзя удалить последний активный счёт
+CREATE OR REPLACE TRIGGER trg_bank_accounts_no_delete_last_active
+    BEFORE DELETE ON bank_accounts
     FOR EACH ROW
-    WHEN (OLD.status = true AND NEW.status = false)
-    EXECUTE FUNCTION trg_lock_doctors_active_status();
+    WHEN (OLD.is_active = TRUE)
+    EXECUTE FUNCTION accounts_business_rule_check();
+

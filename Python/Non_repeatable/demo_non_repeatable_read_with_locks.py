@@ -19,12 +19,12 @@ def reader():
     try:
         cur.execute("BEGIN;")
         # используем SELECT через lock-функцию: она берёт shared lock на table_key = 1001
-        stmt = 'SELECT balance FROM bank_accounts WHERE id = 1'
-        cur.execute("SELECT * FROM guarded_query(%s);", (stmt,))
+        stmt = 'id = 1'
+        cur.execute("SELECT * FROM guarded_query_accounts(%s);", (stmt,))
         r1 = cur.fetchall()
         logger.info("T1 прочитала запись: %s", r1)
         time.sleep(2)   # держит транзакцию и shared lock
-        cur.execute("SELECT * FROM guarded_query(%s);", (stmt,))
+        cur.execute("SELECT * FROM guarded_query_accounts(%s);", (stmt,))
         r2 = cur.fetchall()
         logger.info("T1 прочитала запись: %s", r2)
         conn.commit()
@@ -41,10 +41,10 @@ def writer():
     cur = conn.cursor()
     try:
         cur.execute("BEGIN;")
-        print("T2: пытается UPDATE (будет заблокирован и ЖДАТЬ!)")
-        cur.execute("UPDATE bank_accounts SET balance = 25000 WHERE id=1;")
+        print("T2: пытается UPDATE (будет заблокирован!)")
+        cur.execute("UPDATE bank_accounts SET balance = balance + 100 WHERE id=1;")
         conn.commit()
-        logger.info("T2 сделала коммит")
+        logger.info("T2 сделала коммит но не измеенила прочитанную T1 запись(тк Return null)")
     except Exception as e:
         logger.error("Т2 исключение: %s", e)
         conn.rollback()
