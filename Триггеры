@@ -19,17 +19,14 @@ CREATE TRIGGER trg_prevent_lost_update
 	FOR EACH ROW
 	EXECUTE FUNCTION prevent_lost_update();
 
--- Триггер для Non-repeatable Read и Phantom Read
-CREATE OR REPLACE TRIGGER guarded_write_trigger
-    BEFORE INSERT OR UPDATE OR DELETE
-    ON bank_accounts
+-- Триггер для Non-repeatable Read и Phantom Read и Anomaly / Write Skew
+CREATE or REPLACE TRIGGER trg_accounts_write_lock
+    BEFORE INSERT OR UPDATE OR DELETE ON bank_accounts
     FOR EACH ROW
-    EXECUTE FUNCTION guarded_write();
+    EXECUTE FUNCTION accounts_guarded_write();
 
-
--- Тригер для предотвращения Anomaly / Write Skew
-CREATE OR REPLACE TRIGGER trg_lock_doctors_active_status
-    BEFORE UPDATE OF status ON doctors
-    FOR EACH ROW
-    WHEN (OLD.status = true AND NEW.status = false)
-    EXECUTE FUNCTION trg_lock_doctors_active_status();
+-- Триггер для Lost Update
+CREATE TRIGGER trg_prevent_lost_update
+	BEFORE UPDATE ON bank_accounts
+	FOR EACH ROW
+	EXECUTE FUNCTION prevent_lost_update();
