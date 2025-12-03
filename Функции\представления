@@ -52,61 +52,78 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
---================ Функция для любых SELECT  с блокировкой доступа к CUD ================--
-CREATE OR REPLACE FUNCTION guarded_query(q text)
-RETURNS SETOF jsonb AS $$
+CREATE OR REPLACE FUNCTION guarded_query_accounts(condition text)
+RETURNS SETOF bank_accounts AS $$
+DECLARE
+    lock_key bigint := hashtext('bank_accounts');
+    lock_ok boolean;
+    full_query text;
 BEGIN
-    -- Блокируем только нужные таблицы по целому слову
-    IF q ~ '\ybank_accounts\y' THEN
-        PERFORM pg_advisory_xact_lock_shared(hashtext('bank_accounts'));
+    lock_ok := pg_try_advisory_xact_lock_shared(lock_key);
+
+    IF NOT lock_ok THEN
+        INSERT INTO conflict_log(
+            operation, table_name, conflict_type, message
+        ) VALUES (
+            'SELECT', 'bank_accounts', 'TRY_LOCK_FAILURE_ON_SELECT',
+            'Попытка блокировки не удалась: источник занят'
+        );
+        RETURN;
     END IF;
-	-- Возвращаем запрос с блокировкой
-    RETURN QUERY EXECUTE
-        format('SELECT to_jsonb(t) FROM (%s) AS t', q);
+
+    full_query := format('SELECT * FROM bank_accounts WHERE %s', condition);
+    RETURN QUERY EXECUTE full_query;
 END;
 $$ LANGUAGE plpgsql;
 
--- Триггер функция для предотвращения Non-repeatable Read и Phantom Read
-CREATE OR REPLACE FUNCTION guarded_write()
+CREATE OR REPLACE FUNCTION accounts_guarded_write()
 RETURNS TRIGGER AS $$
+DECLARE
+    lock_key bigint := hashtext('bank_accounts');  -- уникальный ключ для advisory lock
+    lock_ok boolean;
 BEGIN
-    IF NOT pg_try_advisory_xact_lock(hashtext(TG_TABLE_NAME)) THEN
-	INSERT INTO conflict_log (operation, table_name, conflict_type, message)
-        VALUES (
+    -- пытаемся взять блокировку на уровне транзакции
+    lock_ok := pg_try_advisory_xact_lock(lock_key);
+
+    IF NOT lock_ok THEN
+        -- другой процесс держит lock, логируем конфликт
+        INSERT INTO conflict_log(
+            operation, table_name, conflict_type, message,
+            old_balance, new_balance
+        ) VALUES (
             TG_OP,
             TG_TABLE_NAME,
-            'Read-Write-Read',
-            format('Заблокирована операция %s над таблицей %s из-за временного отсутствия доступа', TG_OP, TG_TABLE_NAME)
+            'TRY_LOCK_FAILURE',
+            format(
+                'Не удалось выполнить %s в таблице %s: advisory lock %s уже занят другой транзакцией',
+                TG_OP,
+                TG_TABLE_NAME,
+                lock_key
+            ),
+            OLD.balance,
+            NEW.balance
         );
-		RETURN NULL;
+
+        RETURN NULL;
     END IF;
-	RETURN NEW;
+
+    -- lock получен, продолжаем операцию
+    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
--- Триггер функция для предотвращения Anomaly / Write Skew 
-CREATE OR REPLACE FUNCTION trg_lock_doctors_active_status()
+CREATE OR REPLACE FUNCTION accounts_business_rule_check()
 RETURNS TRIGGER AS $$
+DECLARE
+    cnt_active int;
 BEGIN
-    IF OLD.status = true AND NEW.status = false THEN
+    SELECT COUNT(*) INTO cnt_active FROM bank_accounts WHERE is_active = TRUE;
 
-        -- 1. Пытаемся захватить эксклюзивный lock на инвариант
-        IF NOT pg_try_advisory_xact_lock(hashtext('doctors:status:active')) THEN
-            INSERT INTO conflict_log (operation, table_name, conflict_type, message)
-            VALUES (
-                TG_OP,
-                TG_TABLE_NAME,
-                'Write Skew',
-                'Попытка одновременно деактивировать последнего активного врача — отклонено'
-            );
-            RETURN NULL;  -- строка не обновляется
-        END IF;
-
-        -- 2. Теперь под защитой проверяем актуальное количество
-        IF (SELECT COUNT(*) FROM doctors WHERE status = true) <= 1 THEN
-            RAISE EXCEPTION 'Нельзя деактивировать последнего активного врача';
-        END IF;
+    IF cnt_active <= 1 THEN
+        RAISE EXCEPTION
+            'Нарушено бизнес-правило: должна оставаться хотя бы одна активная учетная запись.';
     END IF;
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
