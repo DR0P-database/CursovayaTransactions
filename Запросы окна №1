@@ -11,38 +11,34 @@ UPDATE bank_accounts SET balance = 30000 WHERE id = 1;
 -- → если изменилась → триггер ловит, пишет в conflict_log и не обновляет данные
 COMMIT;
 
--- UPDATE LOCK окно №2
-BEGIN;
-SELECT * FROM get_account(1);
-UPDATE bank_accounts SET balance = 2000 WHERE id = 1;
-COMMIT;
-
-
 -- Non-repeatable Read окно №1
 BEGIN;
-SELECT * FROM guarded_query('SELECT sum(balance) FROM bank_accounts')
+-- Читаем данные в первый раз
+SELECT sum(balance) FROM guarded_query_accounts('true')
 -- Выпполняется тразакнция №2
 
--- COMMIT 1 транзакции
-SELECT * FROM guarded_query('SELECT sum(balance) FROM bank_accounts')  -- уже 83800!
+-- Читаем данные ещё раз и получаем такой же результат
+SELECT sum(balance) FROM bank_accounts
 COMMIT;
 
 
 -- Phantom Read окно №1
 BEGIN;
-SELECT * FROM guarded_query ('SELECT count(*) FROM bank_accounts WHERE balance < 16000') -- результат : 2
+-- Читаем данные в первый ра
+SELECT count(*) FROM guarded_query_accounts('true')
+
 -- Выпполняется тразакнция №2
 
--- COMMIT 1 транзакции
-SELECT * FROM guarded_query ('SELECT count(*) FROM bank_accounts WHERE balance < 16000')  -- уже 3!
+-- Читаем данные ещё раз и получаем такой же результат
+SELECT count(*) FROM bank_accounts
 COMMIT;
 
 
 -- Anomaly / Write Skew окно №1
 BEGIN;
-SELECT id, full_name, status FROM doctors WHERE status = true;
--- Транзакция №2 выполняется
+-- Смотрим сколько у нас активных врачей
+SELECT * FROM bank_accounts WHERE is_active = true
 
--- COMMIT транзакции №1
-UPDATE doctors SET status = false WHERE id = 1;
-COMMIT;   -- ← Иванов тоже ушёл
+-- Пытаемся снять себя с работы
+UPDATE bank_accounts SET is_active = false WHERE id=2
+COMMIT;
