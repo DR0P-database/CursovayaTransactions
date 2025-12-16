@@ -1,18 +1,4 @@
 -- Триггеры
--- Таблица для логгирования
-CREATE TABLE conflict_log (
-    id            bigserial PRIMARY KEY,
-    logged_at     timestamptz DEFAULT now() NOT NULL,
-    operation     text NOT NULL,              -- INSERT / UPDATE / DELETE
-    table_name    text NOT NULL,              -- bank_account / doctors
-    conflict_type text NOT NULL DEFAULT 'SUCCESS',  -- SUCCESS / LOST_UPDATE / WRITE_SKEW и т.д.
-    old_balance   numeric(8,2),              -- NULL при INSERT
-    new_balance   numeric(8,2),              -- NULL при DELETE
-    old_on_duty   boolean,                    -- NULL для bank_account
-    new_on_duty   boolean,                    -- NULL для bank_account
-    message       text                        -- кастомное сообщение
-);
-
 -- Триггер для updtate lost
 CREATE TRIGGER trg_prevent_lost_update
 	BEFORE UPDATE ON bank_accounts
@@ -20,13 +6,14 @@ CREATE TRIGGER trg_prevent_lost_update
 	EXECUTE FUNCTION prevent_lost_update();
 
 -- Триггер для Non-repeatable Read и Phantom Read и Anomaly / Write Skew
-CREATE or REPLACE TRIGGER trg_accounts_write_lock
+CREATE or REPLACE TRIGGER trg_bank_accounts_at_least_one_active
     BEFORE INSERT OR UPDATE OR DELETE ON bank_accounts
     FOR EACH ROW
     EXECUTE FUNCTION accounts_guarded_write();
 
--- Триггер для Lost Update
-CREATE TRIGGER trg_prevent_lost_update
-	BEFORE UPDATE ON bank_accounts
-	FOR EACH ROW
-	EXECUTE FUNCTION prevent_lost_update();
+-- Триггер для проверки бизнес логики
+CREATE TRIGGER trg_accounts_write_lock
+BEFORE UPDATE OR DELETE
+ON bank_accounts
+FOR EACH ROW
+EXECUTE FUNCTION accounts_business_rule_check();
