@@ -1,6 +1,5 @@
 -- 1. Таблица для конфликтов (Lost Update, Non-repeatable Read, Phantom Read)
 -- Банковские счета
--- Банковские счета
 CREATE TABLE bank_accounts (
     id SERIAL PRIMARY KEY,
     holder TEXT NOT NULL,
@@ -22,6 +21,7 @@ CREATE TABLE conflict_log (
     message       text                        -- кастомное сообщение
 );
 
+-- Пример данных для тестирования
 -- Начальные данные для банковских счетов
 INSERT INTO bank_accounts (holder, balance) VALUES
 ('Иванов И.И.',       15000.00),
@@ -45,23 +45,3 @@ SELECT count(*) FROM bank_accounts WHERE balance < 16000;
 DELETE FROM bank_accounts WHERE holder = 'Бедняков А.А.';
 
 
-
--- 2. Таблица для конфликтов (Anomaly / Write Skew)
--- Доктора
-CREATE TABLE doctors (
-    id         serial PRIMARY KEY,
-    full_name  text NOT NULL,
-    status    boolean NOT NULL
-);
-
--- Начальные данные. 2 активных врача
-INSERT INTO doctors (full_name, status) VALUES
-('Иванов Сергей Александрович',      true),
-('Петрова Анна Викторовна',          true),
-('Сидоров Дмитрий Николаевич',       false),
-('Козлова Ольга Михайловна',         false);
-
--- Для подотовки Serialization Anomaly / Write Skew
-SELECT * FROM doctors
-SELECT id, full_name, status FROM doctors WHERE status = true;
-UPDATE doctors SET status = true WHERE id = 1 or id = 2;
