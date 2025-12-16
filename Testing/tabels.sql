@@ -1,4 +1,12 @@
--- Триггеры
+-- 1. Таблица для конфликтов
+-- Банковские счета
+CREATE TABLE bank_accounts (
+    id SERIAL PRIMARY KEY,
+    holder TEXT NOT NULL,
+    balance NUMERIC(8,2) NOT NULL CHECK (balance >= 0),
+    is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+
 -- Таблица для логгирования
 CREATE TABLE conflict_log (
     id            bigserial PRIMARY KEY,
@@ -13,26 +21,13 @@ CREATE TABLE conflict_log (
     message       text                        -- кастомное сообщение
 );
 
--- Триггер для Lost Update
-CREATE TRIGGER trg_prevent_lost_update
-	BEFORE UPDATE ON bank_accounts
-	FOR EACH ROW
-	EXECUTE FUNCTION prevent_lost_update();
+-- Начальные данные для банковских счетов
+INSERT INTO bank_accounts (holder, balance) VALUES
+('Иванов И.И.',       15000.00),
+('Петров П.П.',       23000.00),
+('Сидорова А.В.',     18700.00),
+('Козлов В.С.',       9200.00),
+('Морозова Е.Н.',     31100.00);
 
--- Триггер для Non-repeatable Read и Phantom Read и Anomaly / Write Skew
-CREATE or REPLACE TRIGGER trg_accounts_write_lock
-    BEFORE INSERT OR UPDATE OR DELETE ON bank_accounts
-    FOR EACH ROW
-    EXECUTE FUNCTION accounts_guarded_write();
-
--- Триггеры для Бизнес правила
-CREATE TRIGGER trg_accounts_business_update
-BEFORE UPDATE ON bank_accounts
-FOR EACH ROW
-EXECUTE FUNCTION accounts_business_rule_check();
-
-CREATE TRIGGER trg_accounts_business_delete
-BEFORE DELETE ON bank_accounts
-FOR EACH ROW
-EXECUTE FUNCTION accounts_business_rule_check();
-
+UPDATE bank_accounts SET is_active = FALSE WHERE id <> 1 and id <> 2;
+UPDATE bank_accounts SET is_active = TRUE  WHERE id = 1 or id = 2;
