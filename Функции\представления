@@ -18,8 +18,32 @@ BEGIN
 END;
 $$;
 
+-- 2. Функция для взятия блокировки при чтении
+CREATE OR REPLACE FUNCTION guarded_query_accounts(condition text)
+RETURNS SETOF bank_accounts AS $$
+DECLARE
+    lock_key bigint := hashtext('bank_accounts');
+    lock_ok boolean;
+    full_query text;
+BEGIN
+    lock_ok := pg_try_advisory_xact_lock_shared(lock_key);
 
--- 2. Триггерная функция для предотвращения Update Lost
+    IF NOT lock_ok THEN
+        INSERT INTO conflict_log(
+            operation, table_name, conflict_type, message
+        ) VALUES (
+            'SELECT', 'bank_accounts', 'TRY_LOCK_FAILURE_ON_SELECT',
+            'Попытка блокировки не удалась: источник занят'
+        );
+        RETURN;
+    END IF;
+
+    full_query := format('SELECT * FROM bank_accounts WHERE %s', condition);
+    RETURN QUERY EXECUTE full_query;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 1. Триггерная функция для предотвращения Update Lost
 CREATE OR REPLACE FUNCTION prevent_lost_update()
 RETURNS trigger AS $$
 DECLARE
@@ -52,30 +76,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION guarded_query_accounts(condition text)
-RETURNS SETOF bank_accounts AS $$
-DECLARE
-    lock_key bigint := hashtext('bank_accounts');
-    lock_ok boolean;
-    full_query text;
-BEGIN
-    lock_ok := pg_try_advisory_xact_lock_shared(lock_key);
 
-    IF NOT lock_ok THEN
-        INSERT INTO conflict_log(
-            operation, table_name, conflict_type, message
-        ) VALUES (
-            'SELECT', 'bank_accounts', 'TRY_LOCK_FAILURE_ON_SELECT',
-            'Попытка блокировки не удалась: источник занят'
-        );
-        RETURN;
-    END IF;
-
-    full_query := format('SELECT * FROM bank_accounts WHERE %s', condition);
-    RETURN QUERY EXECUTE full_query;
-END;
-$$ LANGUAGE plpgsql;
-
+-- 2. Триггерная функция для предотвращения non-repeatable read и Phantom read
 CREATE OR REPLACE FUNCTION accounts_guarded_write()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -112,6 +114,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- 3. Триггерная функция для проверки безнес логики
 CREATE OR REPLACE FUNCTION accounts_business_rule_check()
 RETURNS TRIGGER AS $$
 DECLARE
